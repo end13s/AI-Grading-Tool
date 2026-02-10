@@ -4,6 +4,7 @@ import './FileControls.css';
 
 interface FileControlsProps {
   onFileImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onZipImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onExport: () => void;
   onSaveProgress: () => Promise<boolean | void>;
   onLoadProgress: (e: React.ChangeEvent<HTMLInputElement>, options?: { loadStudents: boolean; loadFeedback: boolean }) => void;
@@ -21,9 +22,10 @@ interface FileControlsProps {
   onEnableAutoSave?: () => void;
 }
 
-const FileControls: React.FC<FileControlsProps> = ({ 
-  onFileImport, 
-  onExport, 
+const FileControls: React.FC<FileControlsProps> = ({
+  onFileImport,
+  onZipImport,
+  onExport,
   onSaveProgress,
   onLoadProgress,
   onSubmit,
@@ -82,13 +84,25 @@ const FileControls: React.FC<FileControlsProps> = ({
         <div className="buttons">
           <form>
             <label htmlFor="csvFileInput" className="import-file-label">
-              Import File (exported from Moodle)
+              Import Roster (CSV from Moodle)
             </label>
             <input
               type="file"
               id="csvFileInput"
               accept=".csv"
               onChange={onFileImport}
+              className="import-file-input"
+            />
+          </form>
+          <form>
+            <label htmlFor="zipFileInput" className="import-file-label">
+              Import Student Submissions (ZIP)
+            </label>
+            <input
+              type="file"
+              id="zipFileInput"
+              accept=".zip"
+              onChange={onZipImport}
               className="import-file-input"
             />
           </form>
@@ -208,24 +222,24 @@ const FileControls: React.FC<FileControlsProps> = ({
       
       {/* Keep the status messages */}
       {error && (
-        <StatusMessage 
-          message={error} 
-          type="error" 
-          icon="⚠️"
+        <StatusMessage
+          message={error}
+          type="error"
+          icon="!"
         />
       )}
       {autoSaveStatus && showAutoSaveStatus && (
-        <StatusMessage 
-          message={autoSaveStatus} 
-          type="success" 
-          icon="💾"
+        <StatusMessage
+          message={autoSaveStatus}
+          type="success"
+          icon=""
         />
       )}
       {autoSaveStatus === 'Please select a location to enable auto-save...' && (
-        <StatusMessage 
-          message="Please select where to save this file to enable auto-save" 
-          type="success" 
-          icon="💾"
+        <StatusMessage
+          message="Please select where to save this file to enable auto-save"
+          type="success"
+          icon=""
         />
       )}
     </>

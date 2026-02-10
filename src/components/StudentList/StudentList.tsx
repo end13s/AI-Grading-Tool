@@ -11,7 +11,7 @@ import { Student, SaveData, ChangeRecord, FeedbackItem } from './types';
 import TableHeaderComponent from './components/TableHeader';
 import TableBodyComponent from './components/TableBody';
 import FileControls from './components/FileControls';
-import { useCSVHandling } from './hooks';
+import { useCSVHandling, useZipHandling } from './hooks';
 import './StudentList.css';
 import { getImportedMoodleData } from '@/utils/moodleDataImport';
 import AutoSaveDebugPanel from './components/AutoSaveDebugPanel';
@@ -99,11 +99,17 @@ const StudentList: React.FC<{
   const [isNewImport, setIsNewImport] = useState<boolean>(false);
 
   const { handleFileChange: originalHandleFileChange, exportForMoodle } = useCSVHandling(
-    setStudents, 
-    assignmentName, 
+    setStudents,
+    assignmentName,
     students,
     onChangeTracked,
     setMaxPoints
+  );
+
+  const { zipError, zipStatus, handleZipImport } = useZipHandling(
+    students,
+    setStudents,
+    onChangeTracked
   );
 
   // Wrap the original handleFileChange to set isNewImport
@@ -348,7 +354,8 @@ const StudentList: React.FC<{
       try {
         const savedFileName = localStorage.getItem('lastSaveFileName');
         if (!savedFileName) {
-          throw new Error('No saved file name found');
+          console.log('No saved file name found - this is normal on first load');
+          return;
         }
 
         // Request user to select the file again
@@ -364,12 +371,16 @@ const StudentList: React.FC<{
         await storeFileHandle(handle);
         return handle;
       } catch (error) {
-        console.error('Error restoring file handle:', error);
-        throw error;
+        console.log('Could not restore file handle:', error);
+        // Don't throw - this is expected on first load
+        return null;
       }
     };
-    
-    restoreFileHandle();
+
+    restoreFileHandle().catch(err => {
+      // Silently handle any errors - this is expected behavior
+      console.log('File handle restoration skipped');
+    });
   }, []);
 
   const columns = React.useMemo<ColumnDef<Student>[]>(
@@ -860,13 +871,14 @@ const StudentList: React.FC<{
       <div className="listSection">
         <FileControls
           onFileImport={handleFileChange}
+          onZipImport={handleZipImport}
           onExport={exportForMoodle}
           onSaveProgress={handleSaveProgress}
           onLoadProgress={handleLoadProgress}
           onSubmit={handleSubmit}
-          error={error}
-          autoSaveStatus={autoSaveStatus}
-          showAutoSaveStatus={showAutoSaveStatus}
+          error={error || zipError}
+          autoSaveStatus={autoSaveStatus || zipStatus}
+          showAutoSaveStatus={showAutoSaveStatus || !!zipStatus}
           hasData={students.length > 0}
           isGradingComplete={isGradingComplete()}
           isSaving={isSaving}

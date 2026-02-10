@@ -1,56 +1,78 @@
+/* Color Palette:
+   Primary: #222831 (Dark background)
+   Secondary: #393E46 (Medium dark)
+   Accent 1: #948979 (Muted beige)
+   Accent 2: #DFD0B8 (Light beige)
+*/
+
 .controls-container {
   margin-bottom: 1rem;
-  padding: 0.5rem;
+  padding: 1rem;
+  background: #393E46;
+  border-radius: 8px;
+  border: 1px solid #948979;
 }
 
 .buttons {
   display: flex;
   gap: 10px;
   margin-bottom: 0.75rem;
-  flex-wrap: nowrap;
+  flex-wrap: wrap;
   align-items: center;
 }
 
 .studentBtn,
 .import-file-label {
-  padding: 0.75rem 1rem;
-  font-size: 0.95rem;
-  height: 45px;
+  padding: 0.6em 1.2em;
+  font-size: 0.95em;
+  font-weight: 500;
+  font-family: inherit;
+  background-color: #393E46;
+  color: #DFD0B8;
+  border: 1px solid #948979;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: auto;
   display: flex;
   align-items: center;
   justify-content: center;
   white-space: nowrap;
 }
 
+.studentBtn:hover,
+.import-file-label:hover {
+  background-color: #948979;
+  color: #222831;
+  border-color: #DFD0B8;
+}
+
+.studentBtn:disabled,
+.import-file-label:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  background-color: #393E46;
+  color: #948979;
+}
+
+.studentBtn:disabled:hover,
+.import-file-label:disabled:hover {
+  background-color: #393E46;
+  color: #948979;
+  border-color: #948979;
+}
+
 .import-file-label {
-  min-width: 200px;
+  min-width: 180px;
 }
 
-.button-like,
-.button-like-label {
-  background-color: rgb(79, 70, 229);
-  color: white;
-  padding: 0.5rem 1rem;
-  border-radius: 0.375rem;
-  border: none;
-  cursor: pointer;
-  font-size: 0.875rem;
-  line-height: 1.25rem;
-  transition: background-color 0.2s;
-}
-
-.button-like:hover,
-.button-like-label:hover {
-  background-color: rgb(67, 56, 202);
-}
-
-.hidden-input {
+.import-file-input {
   display: none;
 }
 
 .status-message {
   padding: 0.5rem;
-  color: #4CAF50;
+  color: #DFD0B8;
 }
 
 .error-message {
@@ -66,9 +88,9 @@
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 2px solid rgba(255, 255, 255, 0.3);
+  border: 2px solid rgba(223, 208, 184, 0.3);
   border-radius: 50%;
-  border-top-color: #fff;
+  border-top-color: #DFD0B8;
   animation: spin 1s ease-in-out infinite;
   margin-right: 8px;
 }
@@ -79,7 +101,7 @@
 
 .last-autosave {
   font-size: 0.8rem;
-  color: #aaa;
+  color: #948979;
   text-align: right;
   margin-top: 0.5rem;
   padding-right: 0.5rem;
@@ -87,7 +109,7 @@
 
 .pending-changes {
   font-size: 0.8rem;
-  color: #888;
+  color: #948979;
   display: flex;
   align-items: center;
   margin-top: 2px;
@@ -96,7 +118,7 @@
 .pending-dot {
   width: 8px;
   height: 8px;
-  background-color: #ff9800;
+  background-color: #948979;
   border-radius: 50%;
   margin-right: 6px;
   animation: pulse 2s infinite;
@@ -128,14 +150,14 @@
   display: flex;
   align-items: center;
   font-size: 0.8rem;
-  color: #ff9800;
+  color: #948979;
   margin-top: 0.5rem;
 }
 
 .import-dot {
   width: 8px;
   height: 8px;
-  background-color: #ff9800;
+  background-color: #948979;
   border-radius: 50%;
   margin-right: 6px;
 }
@@ -162,9 +184,9 @@
   top: 100%;
   left: 0;
   margin-top: 0.5rem;
-  background-color: #2d2d2d;
-  border: 1px solid #444;
-  border-radius: 0.375rem;
+  background-color: #222831;
+  border: 1px solid #948979;
+  border-radius: 6px;
   padding: 1rem;
   z-index: 10;
   min-width: 200px;
@@ -181,7 +203,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  color: white;
+  color: #DFD0B8;
   cursor: pointer;
 }
 
@@ -199,4 +221,4 @@
 .confirm-load:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-} 
+}

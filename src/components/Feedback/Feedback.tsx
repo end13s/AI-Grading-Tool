@@ -102,10 +102,15 @@ const SortableItem = ({
   const hasSelectedStudents = selectedStudent || (selectedStudents && selectedStudents.size > 0);
 
   return (
-    <TableRow 
-      ref={setNodeRef} 
-      style={style} 
-      className={`${isDragging ? 'dragging' : ''} border-b-0 hover:bg-[#252525] transition-colors mb-1`}
+    <TableRow
+      ref={setNodeRef}
+      style={{
+        ...style,
+        background: isDragging ? '#393E46' : 'transparent'
+      }}
+      className={`${isDragging ? 'dragging' : ''} border-b-0 transition-colors mb-1`}
+      onMouseEnter={(e) => !isDragging && (e.currentTarget.style.background = '#393E46')}
+      onMouseLeave={(e) => !isDragging && (e.currentTarget.style.background = 'transparent')}
       data-is-dragging={isDragging || undefined}
       data-feedback-id={id}
     >
@@ -115,7 +120,8 @@ const SortableItem = ({
             <Textarea
               value={editingText}
               onChange={(e) => setEditingText(e.target.value)}
-              className="bg-[#2d2d2d] border-[#444] text-white min-h-[40px] resize-y p-1"
+              className="min-h-[40px] resize-y p-1"
+              style={{ background: '#393E46', border: '1px solid #948979', color: '#DFD0B8' }}
             />
           </TableCell>
           <TableCell>
@@ -124,7 +130,8 @@ const SortableItem = ({
                 type="number"
                 value={editingDeduction}
                 onChange={(e) => setEditingDeduction(Number(e.target.value))}
-                className="w-[60px] bg-[#2d2d2d] border-[#444] text-white p-1 text-center"
+                className="w-[60px] p-1 text-center"
+                style={{ background: '#393E46', border: '1px solid #948979', color: '#DFD0B8' }}
                 min={0}
                 max={20}
               />
@@ -132,16 +139,18 @@ const SortableItem = ({
           </TableCell>
           <TableCell>
             <div className="flex space-x-1">
-              <Button 
+              <Button
                 onClick={() => onAcceptEdit(item.id)}
-                className="bg-[#4CAF50] hover:bg-[#45a049] text-white p-1"
+                className="p-1"
+                style={{ background: '#4CAF50', color: '#DFD0B8' }}
                 size="sm"
               >
                 ✓
               </Button>
-              <Button 
+              <Button
                 onClick={onRejectEdit}
-                className="bg-[#f44336] hover:bg-[#d32f2f] text-white p-1"
+                className="p-1"
+                style={{ background: '#f44336', color: '#DFD0B8' }}
                 size="sm"
               >
                 ✕
@@ -152,16 +161,26 @@ const SortableItem = ({
       ) : (
         <>
           <TableCell className="p-0 py-0.5">
-            <div 
-              className={`py-0.5 pl-1 pr-2 rounded transition-colors whitespace-pre-wrap break-words text-sm flex items-center ${
-                isDragging 
-                  ? 'bg-[#2c2c2c] border-l-2 border-[#666] text-[#ffffff] shadow-md' 
-                  : isSelected 
-                    ? 'bg-[#3a5a3e] border-l-2 border-[#6CAF70] text-[#ffffff] selected-feedback'
+            <div
+              className="py-0.5 pl-1 pr-2 rounded transition-colors whitespace-pre-wrap break-words text-sm flex items-center border-l-2"
+              style={{
+                background: isDragging
+                  ? '#393E46'
+                  : isSelected
+                    ? '#2d4a3e'
                     : appliedIds.includes(item.id)
-                      ? 'bg-[#2d4a3e] border-l-2 border-[#4CAF50] text-[#e1e1e1]'
-                      : 'bg-[#3a3f4b] border-l-2 border-[#5c6bc0] text-[#e1e1e1] hover:bg-[#454b5a]'
-              }`}
+                      ? '#2d4a3e'
+                      : '#222831',
+                borderColor: isDragging
+                  ? '#948979'
+                  : isSelected
+                    ? '#4CAF50'
+                    : appliedIds.includes(item.id)
+                      ? '#4CAF50'
+                      : '#948979',
+                color: '#DFD0B8',
+                boxShadow: isDragging ? '0 4px 6px rgba(0, 0, 0, 0.3)' : 'none'
+              }}
               onClick={(e) => {
                 if (e.target === e.currentTarget) {
                   e.stopPropagation();
@@ -171,19 +190,24 @@ const SortableItem = ({
                 }
               }}
             >
-              <div 
-                {...attributes} 
-                {...listeners} 
+              <div
+                {...attributes}
+                {...listeners}
                 className="cursor-move inline-block opacity-60 hover:opacity-100 flex-shrink-0"
                 title="Drag to reorder"
                 aria-label="Drag handle"
                 role="button"
                 tabIndex={0}
               >
-                <i className="bi bi-grip-vertical text-gray-500"></i>
+                <i className="bi bi-grip-vertical" style={{ color: '#948979' }}></i>
               </div>
-              <span 
-                className="cursor-pointer hover:bg-[#454b5a] p-0.5 rounded transition-colors inline-block ml-0.5 flex-grow"
+              <span
+                className="cursor-pointer p-0.5 rounded transition-colors inline-block ml-0.5 flex-grow"
+                style={{
+                  background: 'transparent'
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.background = '#393E46'}
+                onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
                 onClick={(e) => {
                   e.stopPropagation();
                   if (e.ctrlKey || e.metaKey) {
@@ -197,8 +221,9 @@ const SortableItem = ({
               </span>
             </div>
           </TableCell>
-          <TableCell 
-            className="text-center text-white cursor-pointer w-16 p-0 py-0.5"
+          <TableCell
+            className="text-center cursor-pointer w-16 p-0 py-0.5"
+            style={{ color: '#DFD0B8' }}
             onClick={() => onStartEdit(item)}
           >
             {item.grade}
@@ -213,14 +238,17 @@ const SortableItem = ({
                   onApplyFeedback(item);
                 }
               }}
-              className={`w-5 h-5 rounded-full ${
-                hasSelectedStudents && appliedIds.includes(item.id)
-                  ? 'bg-white shadow-sm' 
-                  : 'border border-gray-400 hover:border-gray-300'
-              }`}
+              className="w-5 h-5 rounded-full"
+              style={{
+                background: hasSelectedStudents && appliedIds.includes(item.id)
+                  ? '#DFD0B8'
+                  : 'transparent',
+                border: `1px solid ${hasSelectedStudents && appliedIds.includes(item.id) ? '#DFD0B8' : '#948979'}`,
+                boxShadow: hasSelectedStudents && appliedIds.includes(item.id) ? '0 1px 2px rgba(0, 0, 0, 0.3)' : 'none'
+              }}
             >
               {hasSelectedStudents && appliedIds.includes(item.id) ? (
-                <i className="bi bi-check text-black"></i>
+                <i className="bi bi-check" style={{ color: '#222831' }}></i>
               ) : (
                 <span></span>
               )}
@@ -232,7 +260,10 @@ const SortableItem = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => onStartEdit(item)}
-                className="text-blue-400 hover:text-blue-300 hover:bg-transparent px-1.5"
+                className="px-1.5 hover:bg-transparent"
+                style={{ color: '#948979' }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#DFD0B8'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#948979'}
               >
                 <i className="bi bi-pencil"></i>
               </Button>
@@ -240,7 +271,10 @@ const SortableItem = ({
                 variant="ghost"
                 size="sm"
                 onClick={() => onDeleteFeedback(item.id)}
-                className="text-[#f44336] hover:text-[#d32f2f] hover:bg-transparent px-1.5"
+                className="px-1.5 hover:bg-transparent"
+                style={{ color: '#f44336' }}
+                onMouseEnter={(e) => e.currentTarget.style.color = '#d32f2f'}
+                onMouseLeave={(e) => e.currentTarget.style.color = '#f44336'}
               >
                 <i className="bi bi-trash"></i>
               </Button>
@@ -630,14 +664,15 @@ const Feedback: React.FC<Props> = ({
   }, [isSearching, searchResults, getSortedFeedbackItems]);
 
   return (
-    <div className="bg-[#1e1e1e] p-4 rounded-md h-[calc(100vh-280px)] flex flex-col mt-5">
+    <div className="p-4 rounded-md h-[calc(100vh-280px)] flex flex-col mt-5" style={{ background: '#393E46', border: '1px solid #948979' }}>
       <div className="mb-2 relative flex items-center justify-end">
         <div className={`w-full transition-all duration-200 ease-out ${isSearchBarVisible ? 'visible' : 'invisible absolute'}`}>
           <div className={`w-full relative ${isSearchBarVisible ? fadeInClass : fadeOutClass}`}>
-            <div className="relative flex items-center bg-[#2d2d2d] rounded border border-[#444] pr-2">
-              <Search 
-                className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400" 
-                size={16} 
+            <div className="relative flex items-center rounded pr-2" style={{ background: '#222831', border: '1px solid #948979' }}>
+              <Search
+                className="absolute left-2 top-1/2 transform -translate-y-1/2"
+                style={{ color: '#948979' }}
+                size={16}
               />
               <Input
                 ref={searchInputRef}
@@ -645,7 +680,8 @@ const Feedback: React.FC<Props> = ({
                 placeholder="Search feedback comments... (Ctrl+F)"
                 value={searchQuery}
                 onChange={(e) => handleSearch(e.target.value)}
-                className="pl-8 pr-8 py-1 bg-transparent border-0 text-white text-sm w-full focus-visible:ring-0 focus-visible:ring-offset-0"
+                className="pl-8 pr-8 py-1 bg-transparent border-0 text-sm w-full focus-visible:ring-0 focus-visible:ring-offset-0"
+                style={{ color: '#DFD0B8' }}
                 onKeyDown={(e) => {
                   if (e.key === 'Escape') {
                     if (!searchQuery) {
@@ -659,14 +695,15 @@ const Feedback: React.FC<Props> = ({
               />
               <button
                 onClick={toggleSearchBar}
-                className="ml-1 text-gray-400 hover:text-gray-200 p-1 hover:bg-[#444] rounded-full"
+                className="ml-1 p-1 rounded-full"
+                style={{ color: '#948979' }}
                 aria-label="Close search"
               >
                 <X size={14} />
               </button>
             </div>
             {isSearching && (
-              <div className="mt-1 text-xs text-gray-400">
+              <div className="mt-1 text-xs" style={{ color: '#948979' }}>
                 Found {searchResults.length} {searchResults.length === 1 ? 'result' : 'results'}
               </div>
             )}
@@ -675,7 +712,8 @@ const Feedback: React.FC<Props> = ({
         
         <button
           onClick={toggleSearchBar}
-          className={`text-gray-400 hover:text-gray-200 p-1.5 rounded-full hover:bg-[#333] transition-colors ${isSearchBarVisible ? 'hidden' : 'block'}`}
+          className={`p-1.5 rounded-full transition-colors ${isSearchBarVisible ? 'hidden' : 'block'}`}
+          style={{ color: '#948979' }}
           aria-label="Search feedback"
           title="Search feedback (Ctrl+F)"
         >
@@ -699,10 +737,11 @@ const Feedback: React.FC<Props> = ({
         >
           <div className="rounded-md overflow-hidden shadow-sm">
             <Table>
-              <TableHeader className="border-b-0 sticky top-0 bg-[#1a1a1a] z-10">
+              <TableHeader className="border-b-0 sticky top-0 z-10" style={{ background: '#222831' }}>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead 
-                    className="text-[#e1e1e1] cursor-pointer py-2"
+                  <TableHead
+                    className="cursor-pointer py-2"
+                    style={{ color: '#DFD0B8' }}
                     onClick={() => handleSort('text')}
                   >
                     Feedback
@@ -712,8 +751,9 @@ const Feedback: React.FC<Props> = ({
                       </span>
                     )}
                   </TableHead>
-                  <TableHead 
-                    className="w-[80px] text-[#e1e1e1] cursor-pointer text-center py-2"
+                  <TableHead
+                    className="w-[80px] cursor-pointer text-center py-2"
+                    style={{ color: '#DFD0B8' }}
                     onClick={() => handleSort('deduction')}
                   >
                     Deduction
@@ -723,8 +763,9 @@ const Feedback: React.FC<Props> = ({
                       </span>
                     )}
                   </TableHead>
-                  <TableHead 
-                    className="w-[60px] text-[#e1e1e1] cursor-pointer py-2"
+                  <TableHead
+                    className="w-[60px] cursor-pointer py-2"
+                    style={{ color: '#DFD0B8' }}
                     onClick={() => handleSort('applied')}
                   >
                     Apply
@@ -734,7 +775,7 @@ const Feedback: React.FC<Props> = ({
                       </span>
                     )}
                   </TableHead>
-                  <TableHead className="w-[80px] text-[#e1e1e1] py-2">Actions</TableHead>
+                  <TableHead className="w-[80px] py-2" style={{ color: '#DFD0B8' }}>Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody className="divide-y-0">
@@ -768,16 +809,16 @@ const Feedback: React.FC<Props> = ({
                   </SortableContext>
                 ) : isSearching ? (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-4 text-gray-400">
+                    <TableCell colSpan={4} className="text-center py-4" style={{ color: '#948979' }}>
                       <div className="flex flex-col items-center justify-center py-6">
                         <div className="text-lg mb-1">No results found</div>
-                        <div className="text-sm text-gray-500">Try adjusting your search query</div>
+                        <div className="text-sm">Try adjusting your search query</div>
                       </div>
                     </TableCell>
                   </TableRow>
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={4} className="text-center py-4 text-gray-400">
+                    <TableCell colSpan={4} className="text-center py-4" style={{ color: '#948979' }}>
                       No feedback items available
                     </TableCell>
                   </TableRow>
@@ -788,13 +829,14 @@ const Feedback: React.FC<Props> = ({
         </DndContext>
 
         {isAddingFeedback ? (
-          <div className="mt-2 p-3 bg-[#2d2d2d] rounded-md space-y-3 border border-[#333] shadow-sm">
+          <div className="mt-2 p-3 rounded-md space-y-3 shadow-sm" style={{ background: '#222831', border: '1px solid #948979' }}>
             <Textarea
               value={newFeedback.comment}
               onChange={(e) => setNewFeedback({ ...newFeedback, comment: e.target.value })}
               placeholder="Enter feedback comment"
               aria-label="Feedback comment"
-              className="bg-[#3a3f4b] border-[#444] text-white min-h-[50px] resize-y text-sm"
+              className="min-h-[50px] resize-y text-sm"
+              style={{ background: '#393E46', border: '1px solid #948979', color: '#DFD0B8' }}
             />
             <div className="flex items-center gap-3">
               <Input
@@ -803,29 +845,33 @@ const Feedback: React.FC<Props> = ({
                 onChange={(e) => setNewFeedback({ ...newFeedback, grade: Number(e.target.value) })}
                 placeholder="Points"
                 aria-label="Deduction points"
-                className="w-[80px] bg-[#3a3f4b] border-[#444] text-white text-center text-sm"
+                className="w-[80px] text-center text-sm"
+                style={{ background: '#393E46', border: '1px solid #948979', color: '#DFD0B8' }}
               />
-              <div className="text-xs text-gray-400">Deduction points (0-20)</div>
+              <div className="text-xs" style={{ color: '#948979' }}>Deduction points (0-20)</div>
             </div>
             <div className="flex space-x-2">
-              <Button 
+              <Button
                 onClick={handleAddFeedback}
-                className="bg-[#4CAF50] hover:bg-[#45a049] text-white text-sm px-4 py-1"
+                className="text-sm px-4 py-1"
+                style={{ background: '#4CAF50', color: '#DFD0B8', border: '1px solid #4CAF50' }}
               >
                 Add
               </Button>
-              <Button 
+              <Button
                 onClick={() => setIsAddingFeedback(false)}
-                className="bg-[#f44336] hover:bg-[#d32f2f] text-white text-sm px-4 py-1"
+                className="text-sm px-4 py-1"
+                style={{ background: '#f44336', color: '#DFD0B8', border: '1px solid #f44336' }}
               >
                 Cancel
               </Button>
             </div>
           </div>
         ) : (
-          <Button 
+          <Button
             onClick={() => setIsAddingFeedback(true)}
-            className="mt-2 w-full bg-[#4CAF50] hover:bg-[#45a049] text-white py-1.5 rounded-md shadow-sm"
+            className="mt-2 w-full py-1.5 rounded-md shadow-sm"
+            style={{ background: '#4CAF50', color: '#DFD0B8', border: '1px solid #4CAF50' }}
           >
             Add Feedback
           </Button>

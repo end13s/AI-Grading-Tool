@@ -12,6 +12,19 @@ export interface Student {
   gradeCanBeChanged?: string;
   onlineText?: string;
   lastModifiedGrade?: string;
+  // Code submission data
+  submissionFiles?: {
+    name: string;
+    content: string;
+  }[];
+  submissionDate?: string;
+  aiFeedback?: {
+    lineComments: Record<number, string>;
+    overallComments: string[];
+    staticAnalysisOutput: string;
+    reasoning?: string; // AI reasoning for feedback assignment
+    feedbackResponses?: Record<number, 'yes' | 'no' | 'unsure'>; // Feedback ID -> Yes/No/Unsure
+  };
 }
 
 export interface FeedbackItem {
@@ -19,6 +32,8 @@ export interface FeedbackItem {
   comment: string;
   grade: number;
   applied?: boolean;
+  isAISuggested?: boolean; // Marks AI-suggested temporary feedback
+  sessionOnly?: boolean; // If true, will be removed on reset
 }
 
 export interface ChangeRecord {
