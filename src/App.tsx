@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import './App.css';
 import Feedback from './components/Feedback/Feedback';
 import StudentList from './components/StudentList/StudentList';
+import { StudentListHandle } from './components/StudentList/StudentList';
 import { HashRouter as Router, Route, Routes } from 'react-router-dom';
 import { Student, ChangeRecord, FeedbackItem } from '@/components/StudentList/types';
 import ChangeHistoryPanel from './components/StudentList/components/ChangeHistoryPanel';
@@ -101,6 +102,13 @@ const MainApp = () => {
   // AI-related state
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
+
+  // Ref to StudentList for calling its methods
+  const studentListRef = useRef<StudentListHandle>(null);
+  const loadFileInputRef = useRef<HTMLInputElement>(null);
+  const [showLoadOptions, setShowLoadOptions] = useState(false);
+  const [loadStudents, setLoadStudents] = useState(true);
+  const [loadFeedback, setLoadFeedback] = useState(true);
 
   // UI state for collapsible panels
   const [isStudentListMinimized, setIsStudentListMinimized] = useState(false);
@@ -747,19 +755,79 @@ Focus on common patterns, issues, or good practices you observe across submissio
 
         <label htmlFor="csv-import-top" className="px-3 py-2 rounded-md cursor-pointer text-sm flex items-center justify-center" style={{ background: '#393E46', color: '#DFD0B8', border: '1px solid #948979' }}>
           Import Roster (CSV)
-          <input type="file" id="csv-import-top" accept=".csv" className="hidden" />
+          <input
+            type="file"
+            id="csv-import-top"
+            accept=".csv"
+            className="hidden"
+            onChange={(e) => studentListRef.current?.handleFileChange(e)}
+          />
         </label>
 
         <label htmlFor="zip-import-top" className="px-3 py-2 rounded-md cursor-pointer text-sm flex items-center justify-center" style={{ background: '#393E46', color: '#DFD0B8', border: '1px solid #948979' }}>
           Import Code (ZIP)
-          <input type="file" id="zip-import-top" accept=".zip" className="hidden" />
+          <input
+            type="file"
+            id="zip-import-top"
+            accept=".zip"
+            className="hidden"
+            onChange={(e) => studentListRef.current?.handleZipImport(e)}
+          />
         </label>
 
-        <button className="px-3 py-2 rounded-md transition-colors text-sm">
-          Load Progress
-        </button>
+        <div className="relative">
+          <button
+            className="px-3 py-2 rounded-md transition-colors text-sm w-full"
+            onClick={() => setShowLoadOptions(!showLoadOptions)}
+          >
+            Load Progress
+          </button>
+          {showLoadOptions && (
+            <div className="absolute top-full left-0 mt-1 p-3 rounded-md z-50" style={{ background: '#2D2D2D', border: '1px solid #948979', minWidth: '200px' }}>
+              <label className="flex items-center gap-2 text-sm mb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={loadStudents}
+                  onChange={(e) => setLoadStudents(e.target.checked)}
+                />
+                Load Students
+              </label>
+              <label className="flex items-center gap-2 text-sm mb-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={loadFeedback}
+                  onChange={(e) => setLoadFeedback(e.target.checked)}
+                />
+                Load Feedback
+              </label>
+              <input
+                ref={loadFileInputRef}
+                type="file"
+                accept=".json"
+                className="hidden"
+                onChange={(e) => {
+                  studentListRef.current?.handleLoadProgress(e, { loadStudents, loadFeedback });
+                  setShowLoadOptions(false);
+                }}
+              />
+              <button
+                className="px-3 py-1 rounded-md text-sm w-full mt-1"
+                style={{ background: '#393E46', border: '1px solid #948979' }}
+                onClick={() => loadFileInputRef.current?.click()}
+                disabled={!loadStudents && !loadFeedback}
+              >
+                Confirm Load
+              </button>
+            </div>
+          )}
+        </div>
 
-        <button className="px-3 py-2 rounded-md transition-colors text-sm">
+        <button
+          className="px-3 py-2 rounded-md transition-colors text-sm"
+          onClick={() => studentListRef.current?.handleSaveProgress()}
+          disabled={students.length === 0}
+          style={{ opacity: students.length > 0 ? 1 : 0.5, cursor: students.length > 0 ? 'pointer' : 'not-allowed' }}
+        >
           Save Progress
         </button>
 
@@ -800,6 +868,7 @@ Focus on common patterns, issues, or good practices you observe across submissio
       {/* Student List Slide-in Panel */}
       <div className={`student-list-panel ${isStudentListMinimized ? 'open' : ''}`}>
         <StudentList
+          ref={studentListRef}
           students={students}
           setStudents={setStudents}
           selectedStudent={selectedStudent}

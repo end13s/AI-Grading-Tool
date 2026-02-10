@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useImperativeHandle, forwardRef } from "react";
 import {
   ColumnDef,
   SortingState,
@@ -49,8 +49,14 @@ declare global {
   }
 }
 
-// Define the component with inline props type
-const StudentList: React.FC<{
+export interface StudentListHandle {
+  handleFileChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleZipImport: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  handleSaveProgress: () => Promise<boolean | void>;
+  handleLoadProgress: (e: React.ChangeEvent<HTMLInputElement>, options?: { loadStudents: boolean; loadFeedback: boolean }) => void;
+}
+
+interface StudentListProps {
   students: Student[];
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>;
   selectedStudent: string | null;
@@ -66,7 +72,9 @@ const StudentList: React.FC<{
   selectedFeedbackId: number | null;
   onFileHandleCreated: (handle: FileSystemFileHandle) => void;
   setMaxPoints: React.Dispatch<React.SetStateAction<number>>;
-}> = ({
+}
+
+const StudentList = forwardRef<StudentListHandle, StudentListProps>(({
   students,
   setStudents,
   selectedStudent,
@@ -82,7 +90,7 @@ const StudentList: React.FC<{
   selectedFeedbackId,
   onFileHandleCreated,
   setMaxPoints
-}) => {
+}, ref) => {
   console.log('StudentList received students:', students);
   const [sorting, setSorting] = useState<SortingState>([]);
   const [error, setError] = useState<string>("");
@@ -95,10 +103,10 @@ const StudentList: React.FC<{
   const hasUnsavedChangesRef = useRef<boolean>(false);
   const lastSavedDataRef = useRef<string>('');
 
-  // Add a new state variable
-  const [isNewImport, setIsNewImport] = useState<boolean>(false);
+  // Track if this is a new import (used for auto-save prompting)
+  const [, setIsNewImport] = useState<boolean>(false);
 
-  const { handleFileChange: originalHandleFileChange, exportForMoodle } = useCSVHandling(
+  const { handleFileChange: originalHandleFileChange } = useCSVHandling(
     setStudents,
     assignmentName,
     students,
@@ -126,11 +134,8 @@ const StudentList: React.FC<{
     dataSize: number;
   }>>([]);
 
-  // Add this state
-  const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [, setIsSaving] = useState<boolean>(false);
 
-  // Add a state to track if a file is loaded but auto-save isn't enabled yet
-  const [fileLoadedNoAutoSave, setFileLoadedNoAutoSave] = useState(false);
 
   // Move this ref outside of the useEffect
   // Remove unused currentDataRef
@@ -377,7 +382,7 @@ const StudentList: React.FC<{
       }
     };
 
-    restoreFileHandle().catch(err => {
+    restoreFileHandle().catch(_err => {
       // Silently handle any errors - this is expected behavior
       console.log('File handle restoration skipped');
     });
@@ -674,83 +679,12 @@ const StudentList: React.FC<{
     reader.readAsText(file);
   };
 
-  // Update the handleEnableAutoSave function
-  const handleEnableAutoSave = async () => {
-    try {
-      const fileName = sessionStorage.getItem('loadedFileName') || "your_progress.json";
-      const content = sessionStorage.getItem('loadedFileContent');
-      
-      if (!content) {
-        setError("Could not retrieve file content. Please try loading the file again.");
-        return;
-      }
-      
-      const options = {
-        suggestedName: fileName,
-        types: [{
-          description: 'JSON Files',
-          accept: { 'application/json': ['.json'] },
-        }],
-      };
-      
-      // Show the save picker to get a file handle
-      const handle = await window.showSaveFilePicker(options);
-      
-      // Set the file handle in the component state
-      setFileHandle(handle);
-      
-      // Store the file handle for future sessions
-      await storeFileHandle(handle);
-      
-      // IMPORTANT: Pass the file handle back to the parent component
-      onFileHandleCreated(handle);
-      
-      console.log('File handle created and passed to parent:', handle);
-      
-      // Save the file immediately to the selected location
-      const writable = await handle.createWritable();
-      await writable.write(content);
-      await writable.close();
-      
-      // Update the last save time
-      lastSaveTimeRef.current = Date.now();
-      
-      // Update the last saved data reference with the current data
-      lastSavedDataRef.current = JSON.stringify({ students, feedbackItems });
-      
-      // Reset the unsaved changes flag
-      hasUnsavedChangesRef.current = false;
-      
-      // Format current time for display
-      const timeString = new Date().toLocaleTimeString();
-      onLastAutoSaveTimeUpdate(timeString);
-      
-      setAutoSaveStatus('Auto-save enabled');
-      setShowAutoSaveStatus(true);
-      setTimeout(() => {
-        setShowAutoSaveStatus(false);
-      }, 3000);
-      
-      // Clear the session storage
-      sessionStorage.removeItem('loadedFileContent');
-      sessionStorage.removeItem('loadedFileName');
-      
-      // Reset the flag
-      setFileLoadedNoAutoSave(false);
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        console.log('User cancelled the save dialog');
-        setAutoSaveStatus('Auto-save not enabled (no file location selected)');
-        setShowAutoSaveStatus(true);
-        setTimeout(() => {
-          setShowAutoSaveStatus(false);
-        }, 5000);
-      } else {
-        console.error('Error setting up auto-save:', err);
-        setError('Failed to enable auto-save. You will need to save manually.');
-      }
-    }
-  };
+  useImperativeHandle(ref, () => ({
+    handleFileChange,
+    handleZipImport,
+    handleSaveProgress,
+    handleLoadProgress,
+  }));
 
   // Add this function to create a new file handle
   const createNewFileHandle = async () => {
@@ -815,44 +749,6 @@ const StudentList: React.FC<{
     }
   };
 
-  // Add this function to check if all students have grades and feedback
-  const isGradingComplete = () => {
-    return students.every(student => {
-      const hasGrade = student.grade && student.grade.trim() !== '';
-      const hasFeedback = student.feedback && student.feedback.trim() !== '';
-      return hasGrade && hasFeedback;
-    });
-  };
-
-  const handleSubmit = () => {
-    if (!isGradingComplete()) {
-      alert('Please complete all grades and feedback before submitting.');
-      return;
-    }
-    
-    // Export to CSV
-    exportForMoodle();
-    
-    // Send data to Moodle page using postMessage
-    if (window.opener) {
-      window.opener.postMessage({
-        type: 'WRITE_GRADES',
-        data: {
-          students: students.map(student => ({
-            email: student.email,
-            grade: student.grade,
-            feedback: student.feedback
-          }))
-        }
-      }, '*');  // Using * for now, but you might want to restrict this to your Moodle domain
-      
-      // Alert user that grades are being filled
-      alert('Grades and feedback are being filled in the Moodle page. Please check the Moodle window.');
-    } else {
-      alert('Cannot find Moodle page. Please make sure you opened this from the Moodle grading page.');
-    }
-  };
-
   // Add storeFileHandle function
   const storeFileHandle = async (handle: FileSystemFileHandle) => {
     try {
@@ -870,22 +766,10 @@ const StudentList: React.FC<{
     <div className="layout">
       <div className="listSection">
         <FileControls
-          onFileImport={handleFileChange}
-          onZipImport={handleZipImport}
-          onExport={exportForMoodle}
-          onSaveProgress={handleSaveProgress}
-          onLoadProgress={handleLoadProgress}
-          onSubmit={handleSubmit}
           error={error || zipError}
           autoSaveStatus={autoSaveStatus || zipStatus}
           showAutoSaveStatus={showAutoSaveStatus || !!zipStatus}
-          hasData={students.length > 0}
-          isGradingComplete={isGradingComplete()}
-          isSaving={isSaving}
           fileHandle={fileHandle || undefined}
-          isNewImport={isNewImport}
-          fileLoadedNoAutoSave={fileLoadedNoAutoSave}
-          onEnableAutoSave={handleEnableAutoSave}
         />
         <div className="rounded-md border">
           <div className="table-container">
@@ -913,6 +797,6 @@ const StudentList: React.FC<{
       />
     </div>
   );
-};
+});
 
 export default StudentList;

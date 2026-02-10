@@ -5,7 +5,8 @@
       "Bash(unzip:*)",
       "Bash(npm install:*)",
       "Bash(npm run build:*)",
-      "Bash(npm run dev:*)"
+      "Bash(npm run dev:*)",
+      "Bash(npx tsc:*)"
     ],
     "deny": [],
     "ask": []
