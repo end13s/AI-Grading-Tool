@@ -1,5 +1,3 @@
-import { useState } from 'react';
-
 export type AIMode = 'predefined' | 'ai-suggested' | 'custom-prompt';
 
 interface AISettingsTabsProps {

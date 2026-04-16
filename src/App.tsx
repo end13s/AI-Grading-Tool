@@ -4,12 +4,15 @@ import Feedback from './components/Feedback/Feedback';
 import StudentList from './components/StudentList/StudentList';
 import { StudentListHandle } from './components/StudentList/StudentList';
 import { HashRouter as Router, Route, Routes } from 'react-router-dom';
-import { Student, ChangeRecord, FeedbackItem } from '@/components/StudentList/types';
-import ChangeHistoryPanel from './components/StudentList/components/ChangeHistoryPanel';
+import { Student, ChangeRecord, FeedbackItem, ZyBooksSession, ZyBooksLabPart } from '@/components/StudentList/types';
+import ChangeHistoryPanel from './components/ChangeHistoryPanel/ChangeHistoryPanel';
 import AISettings from './components/AISettings/AISettings';
 import StudentCodePanel from './components/StudentCodePanel/StudentCodePanel';
-import { generateFeedback } from './lib/llm';
+import { generateFeedback, evaluateAgainstExercise } from './lib/llm';
 import { getMainPythonFile } from './lib/zipUtils';
+import { useZyBooksCSVHandling } from '@/hooks';
+import ZyBooksPanel from './components/ZyBooksPanel/ZyBooksPanel';
+import TurtlePanel from './components/TurtlePanel/TurtlePanel';
 
 const MAX_CHANGES = 50;
 const SAVE_HANDLE_KEY = 'save_handle_id';
@@ -115,6 +118,162 @@ const MainApp = () => {
 
   // State for AI-suggested feedback (temporary, session-only)
   const [aiSuggestedFeedback, setAISuggestedFeedback] = useState<FeedbackItem[]>([]);
+
+  // ── ZyBooks multi-part lab session ──────────────────────────────────────────
+  const {
+    error: zyBooksError,
+    session: zyBooksSession,
+    setSession: setZyBooksSession,
+    handleFileChange: handleZyBooksFileChange,
+  } = useZyBooksCSVHandling();
+
+  // Ref used to detect when a ZIP import was triggered for a specific lab
+  const zipLoadingForLabRef = useRef<string | null>(null);
+
+  // After students state changes, check if we just loaded a ZIP for a lab part
+  useEffect(() => {
+    const labId = zipLoadingForLabRef.current;
+    if (!labId || !zyBooksSession) return;
+    const hasFiles = students.some(s => s.submissionFiles && s.submissionFiles.length > 0);
+    if (hasFiles) {
+      setZyBooksSession((prev: ZyBooksSession | null) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          labs: prev.labs.map((lab: ZyBooksLabPart) =>
+            lab.id === labId ? { ...lab, submissionsLoaded: true } : lab
+          ),
+        };
+      });
+      zipLoadingForLabRef.current = null;
+    }
+  }, [students]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /**
+   * Snapshot each student's current grading state into the active lab's manualGrades.
+   * Returns the updated session without mutating state.
+   */
+  const commitActiveLabGrades = (session: ZyBooksSession, currentStudents: Student[]): ZyBooksSession => {
+    if (!session.activeLabId) return session;
+    return {
+      ...session,
+      labs: session.labs.map(lab => {
+        if (lab.id !== session.activeLabId) return lab;
+        const updatedGrades = { ...lab.manualGrades };
+        currentStudents.forEach(s => {
+          const key = s.email.trim().toLowerCase();
+          updatedGrades[key] = {
+            grade: s.grade,
+            appliedIds: s.appliedIds,
+            feedback: s.feedback,
+            submissionFiles: s.submissionFiles,
+          };
+        });
+        return { ...lab, manualGrades: updatedGrades };
+      }),
+    };
+  };
+
+  /**
+   * Switch the active lab. Commits current grades, then restores saved state
+   * for the new lab (grades + submission files).
+   */
+  const handleLabSelect = (labId: string) => {
+    if (!zyBooksSession) return;
+
+    // Commit current lab grades before switching
+    const committed = commitActiveLabGrades(zyBooksSession, students);
+
+    // Restore grades & files for the new lab
+    const newLab = committed.labs.find(l => l.id === labId);
+    if (newLab && !newLab.isAutoGraded) {
+      setStudents(prev => prev.map(s => {
+        const key = s.email.trim().toLowerCase();
+        const saved = newLab.manualGrades[key];
+        if (saved) {
+          return {
+            ...s,
+            grade: saved.grade,
+            appliedIds: saved.appliedIds,
+            feedback: saved.feedback,
+            submissionFiles: saved.submissionFiles ?? s.submissionFiles,
+          };
+        }
+        // No saved state for this student in this lab — clear grading
+        return { ...s, grade: '', appliedIds: [], feedback: '', submissionFiles: undefined };
+      }));
+    }
+
+    setZyBooksSession({ ...committed, activeLabId: labId });
+  };
+
+  /**
+   * Called when the instructor loads a ZIP for a specific lab part.
+   * Clears current submissions, sets the active lab, then triggers the normal ZIP import.
+   */
+  const handleZipImportForLab = (labId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!zyBooksSession) return;
+
+    // Commit current lab first
+    const committed = commitActiveLabGrades(zyBooksSession, students);
+
+    // Clear student submissions and grades so the new ZIP starts fresh
+    setStudents(prev => prev.map(s => ({
+      ...s,
+      grade: '',
+      appliedIds: [],
+      feedback: '',
+      submissionFiles: undefined,
+    })));
+
+    setZyBooksSession({ ...committed, activeLabId: labId });
+
+    // Mark that we're waiting for this lab's ZIP to load
+    zipLoadingForLabRef.current = labId;
+
+    // Delegate to the normal ZIP import handler
+    studentListRef.current?.handleZipImport(e);
+  };
+
+  /**
+   * Compute the final weighted grade for every student across all lab parts
+   * and write it into student.grade, ready for Moodle CSV export.
+   *
+   * Formula (per student):
+   *   earnedPts = Σ over all parts:
+   *     auto-graded  → (zyBooksScore / 100) × part.maxPoints
+   *     manual       → (manualGrade  / moodleMax) × part.maxPoints
+   *   finalGrade = (earnedPts / session.totalPoints) × moodleMax
+   */
+  const handleComputeFinalGrades = () => {
+    if (!zyBooksSession) return;
+
+    // Commit any unsaved grades for the current active lab
+    const committed = commitActiveLabGrades(zyBooksSession, students);
+    setZyBooksSession(committed);
+
+    setStudents(prev => prev.map(student => {
+      const email = student.email.trim().toLowerCase();
+      let earnedPts = 0;
+
+      committed.labs.forEach(lab => {
+        if (lab.isAutoGraded) {
+          const pct = lab.zyBooksScores[email] ?? 0;
+          earnedPts += (pct / 100) * lab.maxPoints;
+        } else {
+          const saved = lab.manualGrades[email];
+          const gradeNum = saved ? parseFloat(saved.grade) : 0;
+          const normalised = isNaN(gradeNum) ? 0 : gradeNum / maxPoints;
+          earnedPts += normalised * lab.maxPoints;
+        }
+      });
+
+      const finalGrade = (earnedPts / committed.totalPoints) * maxPoints;
+      return { ...student, grade: parseFloat(finalGrade.toFixed(2)).toString() };
+    }));
+
+    alert('Final grades computed and written to the student roster. You can now export the Moodle CSV.');
+  };
 
   useEffect(() => {
     // First try to get data from URL parameters
@@ -462,36 +621,63 @@ Guidelines:
     try {
       const feedback = await generateAIFeedbackForStudent(student);
 
-      // Update student with AI feedback (now includes feedbackResponses)
-      const updatedStudents = students.map(s => {
-        if (s.name === selectedStudent) {
-          return {
-            ...s,
-            aiFeedback: feedback,
-            feedback: s.feedback + (s.feedback ? '\n' : '') + feedback.overallComments.join('\n')
-          };
-        }
-        return s;
-      });
-
-      setStudents(updatedStudents);
-
-      handleChangeTracked({
-        type: 'feedback',
-        studentName: selectedStudent,
-        oldValue: student.feedback,
-        newValue: student.feedback + '\n' + feedback.overallComments.join('\n'),
-        timestamp: new Date().toISOString(),
-        message: 'AI feedback generated'
-      });
-
-      alert('AI feedback generated successfully!');
+      // Store AI feedback for review — do NOT auto-apply to avoid slop.
+      // The FeedbackReviewPanel will show verdicts and let the instructor confirm.
+      setStudents(prev => prev.map(s =>
+        s.name === selectedStudent ? { ...s, aiFeedback: feedback } : s
+      ));
     } catch (error) {
       console.error('Error generating feedback:', error);
       alert(`Error generating feedback: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsGeneratingFeedback(false);
     }
+  };
+
+  /**
+   * Apply the instructor-confirmed feedback IDs from the review panel to a student.
+   * Uses the same grade calculation as the Feedback component.
+   */
+  const handleApplyReviewedFeedback = (studentName: string, confirmedIds: number[]) => {
+    setStudents(prev => prev.map(student => {
+      if (student.name !== studentName) return student;
+
+      // Merge with any already-applied IDs (union)
+      const merged = Array.from(new Set([...student.appliedIds, ...confirmedIds]));
+
+      const totalDeduction = merged.reduce((sum, id) => {
+        const item = feedbackItems.find(f => f.id === id);
+        return sum + (item?.grade || 0);
+      }, 0);
+
+      const newGrade = Math.max(0, maxPoints - totalDeduction);
+      const newFeedbackText = merged
+        .map(id => feedbackItems.find(f => f.id === id)?.comment)
+        .filter(Boolean)
+        .join('\n');
+
+      const oldState = { grade: student.grade, feedback: student.feedback, appliedIds: [...student.appliedIds] };
+      const updated = { ...student, appliedIds: merged, grade: newGrade.toString(), feedback: newFeedbackText };
+
+      handleChangeTracked({
+        type: 'feedback',
+        studentName,
+        oldValue: oldState,
+        newValue: { grade: updated.grade, feedback: updated.feedback, appliedIds: updated.appliedIds },
+        timestamp: new Date().toISOString(),
+        message: 'AI review applied',
+      });
+
+      window.dispatchEvent(new CustomEvent('grading-change'));
+      return updated;
+    }));
+  };
+
+  /** Clear pending AI feedback for a student (dismiss the review panel). */
+  const handleDismissReview = (studentName: string) => {
+    setStudents(prev => prev.map(s =>
+      s.name === studentName ? { ...s, aiFeedback: undefined } : s
+    ));
   };
 
   const handleGenerateBatchFeedback = async () => {
@@ -503,7 +689,9 @@ Guidelines:
     }
 
     const confirmed = confirm(
-      `Generate AI feedback for ${studentsWithCode.length} students? This may take several minutes.`
+      `Generate AI feedback for ${studentsWithCode.length} students?\n\n` +
+      `Feedback items where AI says YES will be auto-applied (binary assignment).\n` +
+      `This may take several minutes.`
     );
 
     if (!confirmed) return;
@@ -516,17 +704,33 @@ Guidelines:
       try {
         const feedback = await generateAIFeedbackForStudent(student);
 
-        // Update student with feedback responses
+        // Batch mode: auto-apply all "yes" items (binary system — no slop).
+        const yesIds = Object.entries(feedback.feedbackResponses ?? {})
+          .filter(([, verdict]) => verdict === 'yes')
+          .map(([idStr]) => Number(idStr));
+
         setStudents(prevStudents =>
           prevStudents.map(s => {
-            if (s.email === student.email) {
-              return {
-                ...s,
-                aiFeedback: feedback,
-                feedback: s.feedback + (s.feedback ? '\n' : '') + feedback.overallComments.join('\n')
-              };
-            }
-            return s;
+            if (s.email !== student.email) return s;
+
+            const merged = Array.from(new Set([...s.appliedIds, ...yesIds]));
+            const totalDeduction = merged.reduce((sum, id) => {
+              const item = feedbackItems.find(f => f.id === id);
+              return sum + (item?.grade || 0);
+            }, 0);
+            const newGrade = Math.max(0, maxPoints - totalDeduction);
+            const newFeedbackText = merged
+              .map(id => feedbackItems.find(f => f.id === id)?.comment)
+              .filter(Boolean)
+              .join('\n');
+
+            return {
+              ...s,
+              aiFeedback: feedback,
+              appliedIds: merged,
+              grade: merged.length > 0 ? newGrade.toString() : s.grade,
+              feedback: merged.length > 0 ? newFeedbackText : s.feedback,
+            };
           })
         );
 
@@ -543,7 +747,14 @@ Guidelines:
     }
 
     setIsGeneratingFeedback(false);
-    alert(`Batch feedback generation complete!\n\nSuccess: ${successCount}\nErrors: ${errorCount}`);
+    alert(`Batch feedback complete!\n\nSuccess: ${successCount}\nErrors: ${errorCount}\n\nYES-verdict items were auto-applied. Select individual students to review UNSURE items.`);
+  };
+
+  /** Promote AI-suggested items into the permanent feedbackItems list. */
+  const handlePromoteSuggestions = (items: FeedbackItem[]) => {
+    const promoted = items.map(item => ({ ...item, isAISuggested: false, sessionOnly: false }));
+    setFeedbackItems(prev => [...prev, ...promoted]);
+    setAISuggestedFeedback(prev => prev.filter(p => !items.some(i => i.id === p.id)));
   };
 
   // Generate AI-suggested feedback based on all submissions
@@ -561,10 +772,11 @@ Guidelines:
       // Collect all code snippets
       const codeSnippets = studentsWithCode.slice(0, 10).map(student => {
         const mainFile = getMainPythonFile({
+          email: student.email,
           lastName: student.name.split(' ')[1] || '',
           firstName: student.name.split(' ')[0] || '',
           submissionDate: student.submissionDate || '',
-          files: student.submissionFiles
+          files: student.submissionFiles ?? []
         });
         return mainFile?.content || '';
       }).filter(code => code.length > 0);
@@ -613,55 +825,118 @@ Focus on common patterns, issues, or good practices you observe across submissio
     }
   };
 
-  // Generate feedback with custom prompt
-  const handleGenerateWithCustomPrompt = async (customPrompt: string) => {
-    if (!selectedStudent) {
-      alert('Please select a student first');
-      return;
-    }
+  // ── Exercise-description evaluation handlers ─────────────────────────────
 
+  const getMainFileForStudent = (student: Student) => {
+    return getMainPythonFile({
+      email: student.email,
+      lastName: student.name.split(' ')[1] || '',
+      firstName: student.name.split(' ')[0] || '',
+      submissionDate: student.submissionDate || '',
+      files: student.submissionFiles ?? [],
+    });
+  };
+
+  const handleEvaluateExercise = async (exerciseDescription: string) => {
+    if (!selectedStudent) { alert('Please select a student first'); return; }
     const student = students.find(s => s.name === selectedStudent);
-    if (!student || !student.submissionFiles) return;
+    if (!student?.submissionFiles?.length) return;
+
+    const mainFile = getMainFileForStudent(student);
+    if (!mainFile) { alert('No Python file found in submission'); return; }
 
     setIsGeneratingFeedback(true);
-
     try {
-      const mainFile = getMainPythonFile({
-        lastName: student.name.split(' ')[1] || '',
-        firstName: student.name.split(' ')[0] || '',
-        submissionDate: student.submissionDate || '',
-        files: student.submissionFiles
-      });
-
-      if (!mainFile) {
-        throw new Error('No Python file found');
-      }
-
-      const prompt = `${customPrompt}\n\nCode to evaluate:\n\`\`\`python\n${mainFile.content}\n\`\`\`\n\nProvide your evaluation as JSON: {"overall_comments": ["comment1"], "line_comments": {"1": "comment"}, "reasoning": "explanation"}`;
-
-      const feedback = await generateFeedback(mainFile.content, '', prompt, assignmentName, apiKey);
-
-      // Update student
-      setStudents(prevStudents =>
-        prevStudents.map(s => {
-          if (s.name === selectedStudent) {
-            return {
-              ...s,
-              aiFeedback: feedback,
-              feedback: s.feedback + (s.feedback ? '\n' : '') + feedback.overallComments.join('\n')
-            };
-          }
-          return s;
-        })
-      );
-
-      alert('Custom prompt feedback generated successfully!');
-    } catch (error) {
-      console.error('Error generating custom feedback:', error);
-      alert('Failed to generate feedback with custom prompt');
+      const result = await evaluateAgainstExercise(mainFile.content, exerciseDescription, assignmentName, apiKey);
+      setStudents(prev => prev.map(s =>
+        s.name === selectedStudent
+          ? { ...s, aiFeedback: { ...s.aiFeedback, lineComments: s.aiFeedback?.lineComments ?? {}, overallComments: result.overallComments, staticAnalysisOutput: '', reasoning: result.reasoning, exerciseRequirements: result.requirements } }
+          : s
+      ));
+    } catch (err) {
+      alert(`Evaluation failed: ${err instanceof Error ? err.message : String(err)}`);
     } finally {
       setIsGeneratingFeedback(false);
     }
+  };
+
+  const handleEvaluateExerciseBatch = async (exerciseDescription: string) => {
+    const studentsWithCode = students.filter(s => s.submissionFiles?.length);
+    if (!studentsWithCode.length) { alert('No students with code submissions found'); return; }
+    if (!confirm(`Evaluate ${studentsWithCode.length} students against the exercise description?\n\nNOT MET requirements will be auto-applied.`)) return;
+
+    setIsGeneratingFeedback(true);
+    let ok = 0, errors = 0;
+
+    for (const student of studentsWithCode) {
+      const mainFile = getMainFileForStudent(student);
+      if (!mainFile) { errors++; continue; }
+      try {
+        const result = await evaluateAgainstExercise(mainFile.content, exerciseDescription, assignmentName, apiKey);
+
+        // Auto-apply all NOT MET requirements as feedback text
+        const failedReqs = result.requirements.filter(r => r.verdict === 'not-met' || r.verdict === 'partial');
+        const feedbackText = failedReqs.map(r => `${r.requirement}: ${r.comment}`).join('\n');
+        const totalDeduction = failedReqs.reduce((sum, r) => sum + r.suggestedDeduction, 0);
+        const newGrade = Math.max(0, maxPoints - totalDeduction);
+
+        setStudents(prev => prev.map(s => {
+          if (s.email !== student.email) return s;
+          return {
+            ...s,
+            aiFeedback: { ...s.aiFeedback, lineComments: s.aiFeedback?.lineComments ?? {}, overallComments: result.overallComments, staticAnalysisOutput: '', reasoning: result.reasoning, exerciseRequirements: result.requirements },
+            feedback: feedbackText || s.feedback,
+            grade: failedReqs.length > 0 ? newGrade.toString() : s.grade,
+          };
+        }));
+
+        ok++;
+        await new Promise(r => setTimeout(r, 800));
+      } catch { errors++; }
+    }
+
+    setIsGeneratingFeedback(false);
+    alert(`Done! Success: ${ok}  Errors: ${errors}\n\nNOT MET items were auto-applied. Select individual students to review PARTIAL/UNSURE results.`);
+  };
+
+  const handleApplyExerciseRequirements = (studentName: string, indices: number[], _exerciseDescription: string) => {
+    setStudents(prev => prev.map(student => {
+      if (student.name !== studentName) return student;
+      const reqs = student.aiFeedback?.exerciseRequirements ?? [];
+      const selected = indices.map(i => reqs[i]).filter(Boolean);
+      if (!selected.length) return student;
+
+      const feedbackLines = selected.map(r => `${r.requirement}: ${r.comment}`);
+      const totalDeduction = selected.reduce((sum, r) => sum + r.suggestedDeduction, 0);
+      const newFeedback = [student.feedback, ...feedbackLines].filter(Boolean).join('\n');
+      const newGrade = Math.max(0, maxPoints - totalDeduction);
+
+      const oldState = { grade: student.grade, feedback: student.feedback, appliedIds: [...student.appliedIds] };
+      const updated = { ...student, feedback: newFeedback, grade: newGrade.toString() };
+
+      handleChangeTracked({ type: 'feedback', studentName, oldValue: oldState, newValue: { grade: updated.grade, feedback: updated.feedback, appliedIds: updated.appliedIds }, timestamp: new Date().toISOString(), message: 'Exercise requirements applied' });
+      window.dispatchEvent(new CustomEvent('grading-change'));
+      return updated;
+    }));
+  };
+
+  const handlePromoteExerciseRequirements = (_indices: number[], requirements: import('@/lib/llm').RequirementVerdict[]) => {
+    const newItems: FeedbackItem[] = requirements.map(r => ({
+      id: Date.now() + Math.random(),
+      comment: r.requirement,
+      grade: r.suggestedDeduction,
+      isAISuggested: false,
+      sessionOnly: false,
+    }));
+    setFeedbackItems(prev => [...prev, ...newItems]);
+  };
+
+  const handleDismissExerciseResults = (studentName: string) => {
+    setStudents(prev => prev.map(s => {
+      if (s.name !== studentName || !s.aiFeedback) return s;
+      const { exerciseRequirements: _removed, ...rest } = s.aiFeedback;
+      return { ...s, aiFeedback: rest };
+    }));
   };
 
   // Remove AI-suggested feedback item
@@ -731,9 +1006,9 @@ Focus on common patterns, issues, or good practices you observe across submissio
       {/* Control Panel - Grid Layout */}
       <div className="control-panel-grid absolute top-4 right-60" style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
+        gridTemplateColumns: 'repeat(4, 1fr)',
         gap: '8px',
-        width: '600px'
+        width: '780px'
       }}>
         <button
           onClick={() => setIsChangeHistoryVisible(!isChangeHistoryVisible)}
@@ -754,7 +1029,7 @@ Focus on common patterns, issues, or good practices you observe across submissio
         </button>
 
         <label htmlFor="csv-import-top" className="px-3 py-2 rounded-md cursor-pointer text-sm flex items-center justify-center" style={{ background: '#393E46', color: '#DFD0B8', border: '1px solid #948979' }}>
-          Import Roster (CSV)
+          Import Moodle CSV
           <input
             type="file"
             id="csv-import-top"
@@ -772,6 +1047,26 @@ Focus on common patterns, issues, or good practices you observe across submissio
             accept=".zip"
             className="hidden"
             onChange={(e) => studentListRef.current?.handleZipImport(e)}
+          />
+        </label>
+
+        <label
+          htmlFor="zybooks-csv-import"
+          className="px-3 py-2 rounded-md cursor-pointer text-sm flex items-center justify-center"
+          style={{
+            background: zyBooksSession ? '#2e4a3c' : '#393E46',
+            color: zyBooksSession ? '#4caf83' : '#DFD0B8',
+            border: `1px solid ${zyBooksSession ? '#4caf83' : '#948979'}`,
+          }}
+          title={zyBooksError || 'Import ZyBooks CSV to enable multi-part lab grading'}
+        >
+          {zyBooksSession ? `ZyBooks (${zyBooksSession.labs.length} labs)` : 'Import ZyBooks CSV'}
+          <input
+            type="file"
+            id="zybooks-csv-import"
+            accept=".csv"
+            className="hidden"
+            onChange={handleZyBooksFileChange}
           />
         </label>
 
@@ -833,7 +1128,7 @@ Focus on common patterns, issues, or good practices you observe across submissio
 
         {/* Display the last auto-save time */}
         {lastAutoSaveTime && (
-          <div className="col-span-3 text-xs text-center" style={{ color: '#948979', paddingTop: '4px' }}>
+          <div className="col-span-4 text-xs text-center" style={{ color: '#948979', paddingTop: '4px' }}>
             Last auto-save: {lastAutoSaveTime}
           </div>
         )}
@@ -867,6 +1162,37 @@ Focus on common patterns, issues, or good practices you observe across submissio
 
       {/* Student List Slide-in Panel */}
       <div className={`student-list-panel ${isStudentListMinimized ? 'open' : ''}`}>
+
+        {/* ZyBooks error banner */}
+        {zyBooksError && (
+          <div style={{ background: '#5a1a1a', border: '1px solid #a03030', borderRadius: '6px', padding: '8px 12px', marginBottom: '8px', fontSize: '12px', color: '#ffaaaa' }}>
+            ZyBooks import error: {zyBooksError}
+          </div>
+        )}
+
+        {/* ZyBooks Lab Parts Panel — shown only when a ZyBooks CSV is loaded */}
+        {zyBooksSession && (
+          <>
+            {/* Active lab indicator */}
+            {zyBooksSession.activeLabId && (
+              <div style={{ background: '#393E46', border: '1px solid #948979', borderRadius: '6px', padding: '6px 12px', marginBottom: '8px', fontSize: '12px', color: '#DFD0B8', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ color: '#948979' }}>Grading:</span>
+                <span style={{ fontWeight: 600 }}>
+                  {zyBooksSession.labs.find((l: ZyBooksLabPart) => l.id === zyBooksSession.activeLabId)?.name ?? zyBooksSession.activeLabId}
+                </span>
+              </div>
+            )}
+            <ZyBooksPanel
+              session={zyBooksSession}
+              onSessionChange={(s) => setZyBooksSession(s)}
+              onLabSelect={handleLabSelect}
+              onZipImportForLab={handleZipImportForLab}
+              onComputeFinalGrades={handleComputeFinalGrades}
+              moodleMaxPoints={maxPoints}
+            />
+          </>
+        )}
+
         <StudentList
           ref={studentListRef}
           students={students}
@@ -893,13 +1219,22 @@ Focus on common patterns, issues, or good practices you observe across submissio
           <AISettings
             onGenerateFeedback={handleGenerateFeedback}
             onGenerateBatchFeedback={handleGenerateBatchFeedback}
-            onGenerateWithCustomPrompt={handleGenerateWithCustomPrompt}
             onGenerateAISuggestions={handleGenerateAISuggestions}
             isGenerating={isGeneratingFeedback}
             hasSelectedStudent={!!selectedStudent}
             hasStudentsWithCode={hasStudentsWithCode}
             suggestedFeedback={aiSuggestedFeedback}
             onRemoveSuggestion={handleRemoveAISuggestion}
+            onPromoteSuggestions={handlePromoteSuggestions}
+            currentStudent={currentStudent}
+            feedbackItems={feedbackItems}
+            onApplyReview={handleApplyReviewedFeedback}
+            onDismissReview={handleDismissReview}
+            onEvaluateExercise={handleEvaluateExercise}
+            onEvaluateExerciseBatch={handleEvaluateExerciseBatch}
+            onApplyExerciseRequirements={handleApplyExerciseRequirements}
+            onPromoteExerciseRequirements={handlePromoteExerciseRequirements}
+            onDismissExerciseResults={handleDismissExerciseResults}
           />
           <Feedback
             selectedStudent={selectedStudent}
@@ -937,8 +1272,18 @@ Focus on common patterns, issues, or good practices you observe across submissio
           />
         </div>
 
-        {/* Right Column: Empty placeholder for layout */}
-        <div className="right" style={{ display: 'none' }}></div>
+        {/* Right Column: Turtle Panel (visible when student has turtle code) */}
+        <div className="right" style={{
+          display: currentStudent?.submissionFiles?.some(f =>
+            /import turtle|from turtle\s+import/.test(f.content)
+          ) ? 'block' : 'none'
+        }}>
+          <TurtlePanel
+            student={currentStudent}
+            apiKey={apiKey}
+            assignmentName={assignmentName}
+          />
+        </div>
       </main>
     </div>
   );

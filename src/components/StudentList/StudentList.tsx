@@ -11,9 +11,9 @@ import { Student, SaveData, ChangeRecord, FeedbackItem } from './types';
 import TableHeaderComponent from './components/TableHeader';
 import TableBodyComponent from './components/TableBody';
 import FileControls from './components/FileControls';
-import { useCSVHandling, useZipHandling } from './hooks';
+import { useCSVHandling, useZipHandling } from '@/hooks';
 import './StudentList.css';
-import { getImportedMoodleData } from '@/utils/moodleDataImport';
+import { getImportedMoodleData } from '@/lib/moodleDataImport';
 import AutoSaveDebugPanel from './components/AutoSaveDebugPanel';
 
 // Add these type declarations at the top of the file

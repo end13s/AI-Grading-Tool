@@ -15,6 +15,115 @@ interface LLMResponse {
   reasoning?: string;
 }
 
+// ── Exercise-based evaluation ─────────────────────────────────────────────────
+
+export interface RequirementVerdict {
+  requirement: string;        // AI-extracted requirement from the exercise description
+  verdict: 'met' | 'not-met' | 'partial' | 'unsure';
+  comment: string;            // Specific observation about this requirement in the code
+  suggestedDeduction: number; // Suggested point deduction if not fully met
+}
+
+export interface ExerciseEvaluation {
+  requirements: RequirementVerdict[];
+  overallComments: string[];
+  reasoning: string;
+}
+
+/**
+ * Evaluate student code against a pasted exercise description.
+ * AI extracts the requirements from the description and returns a per-requirement verdict.
+ */
+export async function evaluateAgainstExercise(
+  code: string,
+  exerciseDescription: string,
+  assignmentContext: string,
+  apiKey: string,
+): Promise<ExerciseEvaluation> {
+  if (!apiKey) throw new Error("OpenAI API key not configured.");
+
+  const openai = new OpenAI({ apiKey, dangerouslyAllowBrowser: true });
+
+  const prompt = `You are a computer science grading assistant.
+
+Below is the exercise description the student was asked to implement, followed by their Python code submission.
+
+Your job:
+1. Extract every distinct requirement from the exercise description (e.g. "print X", "use a loop", "handle edge case Y").
+2. For each requirement, evaluate whether the student's code satisfies it.
+3. Return a JSON response with per-requirement verdicts.
+
+Verdict meanings:
+- "met"      — requirement is clearly and correctly implemented
+- "not-met"  — requirement is clearly missing or wrong
+- "partial"  — requirement is attempted but incomplete or has issues
+- "unsure"   — cannot determine without running the code
+
+Exercise Description:
+"""
+${exerciseDescription}
+"""
+
+Student Code:
+\`\`\`python
+${code}
+\`\`\`
+
+Assignment context: ${assignmentContext}
+
+Respond ONLY with valid JSON:
+{
+  "requirements": [
+    {
+      "requirement": "Brief description of the requirement",
+      "verdict": "met" | "not-met" | "partial" | "unsure",
+      "comment": "Specific observation about how the code handles this requirement",
+      "suggested_deduction": 0
+    }
+  ],
+  "overall_comments": ["Brief overall assessment sentence"],
+  "reasoning": "One paragraph summary of the submission quality"
+}
+
+Rules:
+- Extract 3–8 concrete, checkable requirements from the description. Do not be vague.
+- suggested_deduction should be 0 for "met", and a reasonable integer (1–10) for "not-met"/"partial"/"unsure" based on importance.
+- Keep comments concise and actionable (1 sentence each).`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: prompt }],
+    temperature: 0.2,
+    max_tokens: 2000,
+  });
+
+  const content = response.choices[0]?.message?.content ?? "";
+  let parsed: {
+    requirements: { requirement: string; verdict: string; comment: string; suggested_deduction: number }[];
+    overall_comments: string[];
+    reasoning: string;
+  };
+
+  try {
+    const match = content.match(/\{[\s\S]*\}/);
+    parsed = JSON.parse(match ? match[0] : content);
+  } catch {
+    throw new Error("AI returned an invalid JSON response. Please try again.");
+  }
+
+  const verdictSet = new Set(['met', 'not-met', 'partial', 'unsure']);
+  return {
+    requirements: (parsed.requirements ?? []).map(r => ({
+      requirement: r.requirement ?? "",
+      verdict: verdictSet.has(r.verdict) ? r.verdict as RequirementVerdict['verdict'] : 'unsure',
+      comment: r.comment ?? "",
+      suggestedDeduction: typeof r.suggested_deduction === 'number' ? r.suggested_deduction : 0,
+    })),
+    overallComments: Array.isArray(parsed.overall_comments) ? parsed.overall_comments : [],
+    reasoning: parsed.reasoning ?? "",
+  };
+}
+
 export async function generateFeedback(
   code: string,
   linterOutput: string,
@@ -148,6 +257,83 @@ export async function generateFeedback(
         `LLM integration failed: ${error instanceof Error ? error.message : "Unknown error"}`,
       );
     }
+  }
+}
+
+/**
+ * Analyze turtle visual output + source code using GPT-4o vision.
+ * imageBase64 should be a plain base64-encoded PNG (no data URI prefix needed here;
+ * we'll add the prefix internally).
+ */
+export async function analyzeTurtleOutput(
+  code: string,
+  imageBase64: string,
+  assignmentContext: string,
+  apiKey: string,
+): Promise<{ comments: string[]; reasoning: string }> {
+  if (!apiKey) {
+    throw new Error("OpenAI API key not configured.");
+  }
+
+  const openai = new OpenAI({
+    apiKey,
+    dangerouslyAllowBrowser: true,
+  });
+
+  const prompt = `You are a computer science grading assistant evaluating a Python turtle graphics submission.
+
+Assignment: ${assignmentContext}
+
+The image shows the turtle graphics output produced by the student's code.
+The source code is also provided below.
+
+Evaluate:
+1. Does the visual output match what the code is supposed to draw?
+2. Are there any visible errors, missing elements, or incorrect shapes/colors?
+3. Is the code well-structured for producing this kind of drawing?
+
+Code:
+\`\`\`python
+${code}
+\`\`\`
+
+Respond ONLY with valid JSON:
+{
+  "comments": ["specific observation 1", "specific observation 2"],
+  "reasoning": "overall assessment of the turtle output quality"
+}`;
+
+  const response = await openai.chat.completions.create({
+    model: "gpt-4o",
+    messages: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "image_url",
+            image_url: {
+              url: `data:image/png;base64,${imageBase64}`,
+              detail: "high",
+            },
+          },
+          { type: "text", text: prompt },
+        ],
+      },
+    ],
+    temperature: 0.3,
+    max_tokens: 1000,
+  });
+
+  const content = response.choices[0]?.message?.content ?? "";
+  try {
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    const parsed = JSON.parse(jsonMatch ? jsonMatch[0] : content);
+    return {
+      comments: Array.isArray(parsed.comments) ? parsed.comments : [],
+      reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "",
+    };
+  } catch {
+    return { comments: [content], reasoning: "" };
   }
 }
 
