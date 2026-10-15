@@ -1,9 +1,9 @@
 {
-  "name": "tempmoodlegrading",
+  "name": "ai-grading-tool",
   "private": true,
-  "version": "0.0.0",
+  "version": "2.1.0",
   "type": "module",
-  "homepage": "https://haneumC.github.io/moodleGrading",
+  "homepage": "https://end13s.github.io/AI-Grading-Tool",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

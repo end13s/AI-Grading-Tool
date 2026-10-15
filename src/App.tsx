@@ -1167,7 +1167,7 @@ Focus on common patterns, issues, or good practices you observe across submissio
         <div>
           <div className="flex items-center gap-2">
             <h1>Grading Assistant</h1>
-            <span className="text-xs" style={{ color: '#948979' }}>v1.0.0</span>
+            <span className="text-xs" style={{ color: '#948979' }}>v2.1.0</span>
           </div>
           <input
             type="text"
