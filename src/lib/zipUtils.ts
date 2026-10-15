@@ -34,7 +34,7 @@ export function parseStudentInfo(filename: string): {
     // In Moodle format: parts[0]=LastName, parts[1]=FirstName, parts[2]=email (without @), parts[3+]=date
     const lastName = parts[0] || 'Unknown';
     const firstName = parts[1] || 'Student';
-    let emailToken = parts[2] || '';
+    const emailToken = parts[2] || '';
     const date = parts.slice(3).join("_") || 'unknown';
 
     let email = emailToken;

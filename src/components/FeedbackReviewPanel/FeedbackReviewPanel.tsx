@@ -72,8 +72,10 @@ export default function FeedbackReviewPanel({
   // Sort: yes first, then unsure, then no, then unrated
   const verdictOrder = { yes: 0, unsure: 1, no: 2 };
   const sortedItems = [...feedbackItems].sort((a, b) => {
-    const va = verdictOrder[responses[a.id] ?? 'no' as any] ?? 3;
-    const vb = verdictOrder[responses[b.id] ?? 'no' as any] ?? 3;
+    const ra = responses[a.id];
+    const rb = responses[b.id];
+    const va = ra ? verdictOrder[ra] : 3;
+    const vb = rb ? verdictOrder[rb] : 3;
     return va - vb;
   });
 
