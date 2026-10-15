@@ -31,3 +31,6 @@ dist-ssr
 resources/
 *.csv
 *.zip
+
+# TypeScript build cache
+*.tsbuildinfo
