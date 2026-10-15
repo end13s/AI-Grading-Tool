@@ -9,6 +9,7 @@ import ChangeHistoryPanel from './components/ChangeHistoryPanel/ChangeHistoryPan
 import AISettings from './components/AISettings/AISettings';
 import StudentCodePanel from './components/StudentCodePanel/StudentCodePanel';
 import { generateFeedback, evaluateAgainstExercise } from './lib/llm';
+import { getStoredApiKey, storeApiKey } from './lib/aiConfig';
 import { getMainPythonFile } from './lib/zipUtils';
 import { useZyBooksCSVHandling } from '@/hooks';
 import ZyBooksPanel from './components/ZyBooksPanel/ZyBooksPanel';
@@ -103,7 +104,11 @@ const MainApp = () => {
   const [fileHandle, setFileHandle] = useState<FileSystemFileHandle | null>(null);
 
   // AI-related state
-  const apiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
+  const [apiKey, setApiKey] = useState<string>(getStoredApiKey);
+  const handleApiKeyChange = (key: string) => {
+    storeApiKey(key);
+    setApiKey(key.trim());
+  };
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
   const batchCancelRef = useRef(false);
 
@@ -1235,6 +1240,8 @@ Focus on common patterns, issues, or good practices you observe across submissio
             onGenerateBatchFeedback={handleGenerateBatchFeedback}
             onGenerateAISuggestions={handleGenerateAISuggestions}
             onStopGeneration={handleStopGeneration}
+            apiKey={apiKey}
+            onApiKeyChange={handleApiKeyChange}
             isGenerating={isGeneratingFeedback}
             hasSelectedStudent={!!selectedStudent}
             hasStudentsWithCode={hasStudentsWithCode}

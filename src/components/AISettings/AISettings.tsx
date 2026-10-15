@@ -2,6 +2,7 @@ import { useState } from 'react';
 import AISettingsTabs, { AIMode } from './AISettingsTabs';
 import CustomPromptMode from './CustomPromptMode';
 import AISuggestedMode from './AISuggestedMode';
+import ApiKeySettings from './ApiKeySettings';
 import FeedbackReviewPanel from '@/components/FeedbackReviewPanel/FeedbackReviewPanel';
 import { FeedbackItem, Student } from '@/components/StudentList/types';
 import { RequirementVerdict } from '@/lib/llm';
@@ -11,6 +12,8 @@ interface AISettingsProps {
   onGenerateBatchFeedback: () => void;
   onGenerateAISuggestions?: () => void;
   onStopGeneration?: () => void;
+  apiKey: string;
+  onApiKeyChange: (key: string) => void;
   isGenerating: boolean;
   hasSelectedStudent: boolean;
   hasStudentsWithCode: boolean;
@@ -34,6 +37,8 @@ export default function AISettings({
   onGenerateBatchFeedback,
   onGenerateAISuggestions,
   onStopGeneration,
+  apiKey,
+  onApiKeyChange,
   isGenerating,
   hasSelectedStudent,
   hasStudentsWithCode,
@@ -63,9 +68,13 @@ export default function AISettings({
 
       {/* Status Indicator */}
       <div className="flex items-center gap-2">
-        <div className="w-3 h-3 rounded-full" style={{ background: '#948979' }}></div>
-        <span style={{ color: '#DFD0B8' }} className="text-sm">AI Ready</span>
+        <div className="w-3 h-3 rounded-full" style={{ background: apiKey ? '#9BC59D' : '#E07A5F' }}></div>
+        <span style={{ color: '#DFD0B8' }} className="text-sm">
+          {apiKey ? 'AI Ready' : 'Add an OpenAI API key to enable AI feedback'}
+        </span>
       </div>
+
+      <ApiKeySettings apiKey={apiKey} onApiKeyChange={onApiKeyChange} />
 
       {isGenerating && onStopGeneration && (
         <button

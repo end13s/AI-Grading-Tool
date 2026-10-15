@@ -1,4 +1,5 @@
 import OpenAI from "openai";
+import { getModel } from "./aiConfig";
 
 export interface Feedback {
   lineComments: Record<number, string>;
@@ -93,10 +94,9 @@ Rules:
 - Keep comments concise and actionable (1 sentence each).`;
 
   const response = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
+    model: getModel(),
     messages: [{ role: "user", content: prompt }],
-    temperature: 0.2,
-    max_tokens: 2000,
+    max_completion_tokens: 16000,
   });
 
   const content = response.choices[0]?.message?.content ?? "";
@@ -155,20 +155,22 @@ export async function generateFeedback(
 
     // Call OpenAI API
     const response = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model: getModel(),
       messages: [
         {
           role: "user",
           content: prompt,
         },
       ],
-      temperature: 0.3,
-      max_tokens: 2000,
+      max_completion_tokens: 16000,
     });
 
-    const content = response.choices[0]?.message?.content;
+    const choice = response.choices[0];
+    const content = choice?.message?.content;
     if (!content) {
-      throw new Error("No response content from LLM");
+      throw new Error(
+        `No response content from LLM (finish_reason: ${choice?.finish_reason ?? "none"}, refusal: ${choice?.message?.refusal ?? "none"})`,
+      );
     }
 
     // Parse JSON response
@@ -264,7 +266,7 @@ export async function generateFeedback(
 }
 
 /**
- * Analyze turtle visual output + source code using GPT-4o vision.
+ * Analyze turtle visual output + source code with the configured (vision-capable) model.
  * imageBase64 should be a plain base64-encoded PNG (no data URI prefix needed here;
  * we'll add the prefix internally).
  */
@@ -307,7 +309,7 @@ Respond ONLY with valid JSON:
 }`;
 
   const response = await openai.chat.completions.create({
-    model: "gpt-4o",
+    model: getModel(),
     messages: [
       {
         role: "user",
@@ -323,8 +325,7 @@ Respond ONLY with valid JSON:
         ],
       },
     ],
-    temperature: 0.3,
-    max_tokens: 1000,
+    max_completion_tokens: 8000,
   });
 
   const content = response.choices[0]?.message?.content ?? "";

@@ -359,7 +359,7 @@ export default function TurtlePanel({ student, apiKey, assignmentName }: TurtleP
   const handleAnalyzeWithAI = async () => {
     if (!canvasRef.current || !turtleFile) return;
     if (!apiKey) {
-      alert('OpenAI API key not configured (VITE_OPENAI_API_KEY).');
+      alert('Add your OpenAI API key under AI Feedback Settings first.');
       return;
     }
 
