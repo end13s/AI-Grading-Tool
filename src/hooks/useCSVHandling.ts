@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import Papa, { ParseResult } from 'papaparse';
 import { saveAs } from 'file-saver';
-import { Student, ChangeRecord } from '../types';
+import { Student, ChangeRecord } from '@/components/StudentList/types';
 
 export const useCSVHandling = (
   setStudents: React.Dispatch<React.SetStateAction<Student[]>>,
@@ -151,7 +151,7 @@ export const useCSVHandling = (
             console.log('CSV validation FAILED');
           }
         },
-        error: (error) => {
+        error: (error: Error) => {
           console.error('Papa parse error:', error);
           setError(`CSV parsing error: ${error.message}`);
         }

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Student, ChangeRecord } from '../types';
+import { Student, ChangeRecord } from '@/components/StudentList/types';
 import { parseMultiSubmissionZip, StudentSubmission } from '@/lib/zipUtils';
 
 export const useZipHandling = (

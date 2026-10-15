@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import Papa, { ParseResult } from 'papaparse';
-import { ZyBooksLabPart, ZyBooksSession } from '../types';
+import { ZyBooksLabPart, ZyBooksSession } from '@/components/StudentList/types';
 
 // Matches columns like "8.10 - Lab (10)" or "8.11 - Lab (90)"
 const LAB_COLUMN_REGEX = /^(\d+\.\d+)\s*-\s*Lab\s*\((\d+)\)$/i;
@@ -117,7 +117,7 @@ export const useZyBooksCSVHandling = () => {
           activeLabId: null,
         };
       },
-      error: (err) => {
+      error: (err: Error) => {
         setError(`CSV parse error: ${err.message}`);
       },
     });
