@@ -6,6 +6,7 @@ export interface Feedback {
   staticAnalysisOutput: string;
   feedbackResponses?: Record<number, 'yes' | 'no' | 'unsure'>;
   reasoning?: string;
+  suggestions?: { comment: string; grade: number }[];
 }
 
 interface LLMResponse {
@@ -13,6 +14,7 @@ interface LLMResponse {
   overall_comments: string[];
   feedback_responses?: Record<string, 'yes' | 'no' | 'unsure'>;
   reasoning?: string;
+  suggestions?: { comment: string; grade: number }[];
 }
 
 // ── Exercise-based evaluation ─────────────────────────────────────────────────
@@ -218,6 +220,7 @@ export async function generateFeedback(
       staticAnalysisOutput: linterOutput,
       feedbackResponses,
       reasoning: parsedResponse.reasoning,
+      suggestions: Array.isArray(parsedResponse.suggestions) ? parsedResponse.suggestions : undefined,
     };
   } catch (error: unknown) {
     console.error("LLM API Error:", error);

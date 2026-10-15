@@ -33,18 +33,8 @@ export default function StudentCodePanel({
     );
   }
 
-  if (!student.submissionFiles || student.submissionFiles.length === 0) {
-    return (
-      <div className="h-full flex items-center justify-center rounded-lg" style={{ background: '#393E46' }}>
-        <div className="text-center" style={{ color: '#948979' }}>
-          <p className="text-lg font-medium">No Code Submission</p>
-          <p className="text-sm">{student.name} has not submitted code yet</p>
-        </div>
-      </div>
-    );
-  }
-
-  const currentFile = student.submissionFiles[selectedFileIndex];
+  const hasSubmissions = student.submissionFiles && student.submissionFiles.length > 0;
+  const currentFile = hasSubmissions ? student.submissionFiles![selectedFileIndex] : null;
   const feedback: Feedback | undefined = student.aiFeedback;
 
   return (
@@ -81,7 +71,7 @@ export default function StudentCodePanel({
       </div>
 
       {/* File Selector */}
-      {student.submissionFiles.length > 1 && (
+      {hasSubmissions && student.submissionFiles!.length > 1 && (
         <div className="px-4 py-2" style={{ background: '#393E46', borderBottom: '1px solid #948979' }}>
           <select
             value={selectedFileIndex}
@@ -89,7 +79,7 @@ export default function StudentCodePanel({
             className="w-full px-3 py-2 rounded focus:outline-none"
             style={{ background: '#222831', color: '#DFD0B8', border: '1px solid #948979' }}
           >
-            {student.submissionFiles.map((file, index) => (
+            {student.submissionFiles!.map((file, index) => (
               <option key={index} value={index}>
                 {file.name}
               </option>
@@ -162,13 +152,22 @@ export default function StudentCodePanel({
       )}
 
       {/* Code Viewer */}
-      <div className="flex-1 overflow-hidden">
-        <CodeViewer
-          code={currentFile.content}
-          feedback={feedback}
-          selectedFile={currentFile.name}
-        />
-      </div>
+      {currentFile ? (
+        <div className="flex-1 overflow-hidden">
+          <CodeViewer
+            code={currentFile.content}
+            feedback={feedback}
+            selectedFile={currentFile.name}
+          />
+        </div>
+      ) : (
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center" style={{ color: '#948979' }}>
+            <p className="text-lg font-medium">No Code Submission</p>
+            <p className="text-sm">{student.name} has not submitted code yet</p>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

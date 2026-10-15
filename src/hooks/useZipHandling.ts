@@ -11,12 +11,20 @@ export const useZipHandling = (
   const [zipStatus, setZipStatus] = useState<string>("");
 
   const matchStudentByEmail = (email: string, studentList: Student[]): Student | undefined => {
-    // Normalize email for comparison
     const normalizedEmail = email.toLowerCase().trim();
+    return studentList.find(student => student.email.toLowerCase().trim() === normalizedEmail);
+  };
 
+  // Fallback: match by name parts when the ZIP filename has a compound last name
+  // e.g. "Vanden_Heuvel_Abigail_..." parses as lastName="Vanden", firstName="Heuvel"
+  // but the roster has "Abigail Vanden Heuvel" — both parts appear in the full name
+  const matchStudentByName = (sub: StudentSubmission, studentList: Student[]): Student | undefined => {
+    const subLast = sub.lastName.toLowerCase().trim();
+    const subFirst = sub.firstName.toLowerCase().trim();
+    if (!subLast || !subFirst) return undefined;
     return studentList.find(student => {
-      const studentEmail = student.email.toLowerCase().trim();
-      return studentEmail === normalizedEmail;
+      const fullName = student.name.toLowerCase();
+      return fullName.includes(subLast) && fullName.includes(subFirst);
     });
   };
 
@@ -49,15 +57,21 @@ export const useZipHandling = (
       console.log('====== STARTING EMAIL MATCHING ======');
       const updatedStudents = students.map(student => {
         const submission = result.students.find(sub => {
-          const matched = matchStudentByEmail(sub.email, [student]);
-          console.log(`Trying to match ZIP email "${sub.email}" with roster email "${student.email}": ${matched ? 'MATCH' : 'no match'}`);
-          return matched !== undefined;
+          // Primary: exact email match
+          if (matchStudentByEmail(sub.email, [student])) {
+            console.log(`✓ Email match: "${sub.email}" → "${student.email}"`);
+            return true;
+          }
+          // Fallback: name-based match (handles compound last names like "Vanden Heuvel")
+          if (matchStudentByName(sub, [student])) {
+            console.log(`✓ Name fallback match: "${sub.lastName} ${sub.firstName}" → "${student.name}"`);
+            return true;
+          }
+          return false;
         });
 
         if (submission) {
           matchedCount++;
-          console.log(`✓ Successfully matched ${submission.email} with ${student.email}`);
-
           return {
             ...student,
             submissionFiles: submission.files,
@@ -69,10 +83,9 @@ export const useZipHandling = (
       });
       console.log('====== MATCHING COMPLETE ======');
 
-      // Find unmatched submissions
+      // Find unmatched submissions (neither email nor name matched)
       unmatchedSubmissions = result.students.filter(sub => {
-        const matched = matchStudentByEmail(sub.email, students);
-        return matched === undefined;
+        return !matchStudentByEmail(sub.email, students) && !matchStudentByName(sub, students);
       });
 
       setStudents(updatedStudents);

@@ -105,6 +105,12 @@ const MainApp = () => {
   // AI-related state
   const apiKey = import.meta.env.VITE_OPENAI_API_KEY || '';
   const [isGeneratingFeedback, setIsGeneratingFeedback] = useState(false);
+  const batchCancelRef = useRef(false);
+
+  const handleStopGeneration = () => {
+    batchCancelRef.current = true;
+    setIsGeneratingFeedback(false);
+  };
 
   // Ref to StudentList for calling its methods
   const studentListRef = useRef<StudentListHandle>(null);
@@ -696,11 +702,13 @@ Guidelines:
 
     if (!confirmed) return;
 
+    batchCancelRef.current = false;
     setIsGeneratingFeedback(true);
     let successCount = 0;
     let errorCount = 0;
 
     for (const student of studentsWithCode) {
+      if (batchCancelRef.current) break;
       try {
         const feedback = await generateAIFeedbackForStudent(student);
 
@@ -747,7 +755,11 @@ Guidelines:
     }
 
     setIsGeneratingFeedback(false);
-    alert(`Batch feedback complete!\n\nSuccess: ${successCount}\nErrors: ${errorCount}\n\nYES-verdict items were auto-applied. Select individual students to review UNSURE items.`);
+    if (batchCancelRef.current) {
+      alert(`Generation stopped.\n\nProcessed: ${successCount + errorCount} students\nSuccess: ${successCount}`);
+    } else {
+      alert(`Batch feedback complete!\n\nSuccess: ${successCount}\nErrors: ${errorCount}\n\nYES-verdict items were auto-applied. Select individual students to review UNSURE items.`);
+    }
   };
 
   /** Promote AI-suggested items into the permanent feedbackItems list. */
@@ -799,23 +811,19 @@ Focus on common patterns, issues, or good practices you observe across submissio
 
       const response = await generateFeedback('', '', prompt, assignmentName, apiKey);
 
-      try {
-        const aiResponse = response as any;
-        if (aiResponse.suggestions && Array.isArray(aiResponse.suggestions)) {
-          const newSuggestions: FeedbackItem[] = aiResponse.suggestions.map((sug: any, idx: number) => ({
-            id: Date.now() + idx,
-            comment: sug.comment || 'AI-suggested feedback',
-            grade: sug.grade || 0,
-            isAISuggested: true,
-            sessionOnly: true
-          }));
+      if (response.suggestions && response.suggestions.length > 0) {
+        const newSuggestions: FeedbackItem[] = response.suggestions.map((sug, idx) => ({
+          id: Date.now() + idx,
+          comment: sug.comment || 'AI-suggested feedback',
+          grade: sug.grade || 0,
+          isAISuggested: true,
+          sessionOnly: true
+        }));
 
-          setAISuggestedFeedback(prev => [...prev, ...newSuggestions]);
-          alert(`Generated ${newSuggestions.length} AI-suggested feedback criteria!`);
-        }
-      } catch (parseError) {
-        console.error('Error parsing AI suggestions:', parseError);
-        alert('AI generated suggestions but format was invalid');
+        setAISuggestedFeedback(prev => [...prev, ...newSuggestions]);
+        alert(`Generated ${newSuggestions.length} AI-suggested feedback criteria!`);
+      } else {
+        alert('AI did not return any suggestions. Try again.');
       }
     } catch (error) {
       console.error('Error generating AI suggestions:', error);
@@ -865,10 +873,12 @@ Focus on common patterns, issues, or good practices you observe across submissio
     if (!studentsWithCode.length) { alert('No students with code submissions found'); return; }
     if (!confirm(`Evaluate ${studentsWithCode.length} students against the exercise description?\n\nNOT MET requirements will be auto-applied.`)) return;
 
+    batchCancelRef.current = false;
     setIsGeneratingFeedback(true);
     let ok = 0, errors = 0;
 
     for (const student of studentsWithCode) {
+      if (batchCancelRef.current) break;
       const mainFile = getMainFileForStudent(student);
       if (!mainFile) { errors++; continue; }
       try {
@@ -896,7 +906,11 @@ Focus on common patterns, issues, or good practices you observe across submissio
     }
 
     setIsGeneratingFeedback(false);
-    alert(`Done! Success: ${ok}  Errors: ${errors}\n\nNOT MET items were auto-applied. Select individual students to review PARTIAL/UNSURE results.`);
+    if (batchCancelRef.current) {
+      alert(`Evaluation stopped.\n\nProcessed: ${ok + errors} students\nSuccess: ${ok}`);
+    } else {
+      alert(`Done! Success: ${ok}  Errors: ${errors}\n\nNOT MET items were auto-applied. Select individual students to review PARTIAL/UNSURE results.`);
+    }
   };
 
   const handleApplyExerciseRequirements = (studentName: string, indices: number[], _exerciseDescription: string) => {
@@ -1220,6 +1234,7 @@ Focus on common patterns, issues, or good practices you observe across submissio
             onGenerateFeedback={handleGenerateFeedback}
             onGenerateBatchFeedback={handleGenerateBatchFeedback}
             onGenerateAISuggestions={handleGenerateAISuggestions}
+            onStopGeneration={handleStopGeneration}
             isGenerating={isGeneratingFeedback}
             hasSelectedStudent={!!selectedStudent}
             hasStudentsWithCode={hasStudentsWithCode}

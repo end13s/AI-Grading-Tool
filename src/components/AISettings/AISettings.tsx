@@ -10,6 +10,7 @@ interface AISettingsProps {
   onGenerateFeedback: () => void;
   onGenerateBatchFeedback: () => void;
   onGenerateAISuggestions?: () => void;
+  onStopGeneration?: () => void;
   isGenerating: boolean;
   hasSelectedStudent: boolean;
   hasStudentsWithCode: boolean;
@@ -32,6 +33,7 @@ export default function AISettings({
   onGenerateFeedback,
   onGenerateBatchFeedback,
   onGenerateAISuggestions,
+  onStopGeneration,
   isGenerating,
   hasSelectedStudent,
   hasStudentsWithCode,
@@ -64,6 +66,16 @@ export default function AISettings({
         <div className="w-3 h-3 rounded-full" style={{ background: '#948979' }}></div>
         <span style={{ color: '#DFD0B8' }} className="text-sm">AI Ready</span>
       </div>
+
+      {isGenerating && onStopGeneration && (
+        <button
+          onClick={onStopGeneration}
+          className="w-full px-4 py-2"
+          style={{ background: '#8B0000', border: '1px solid #A00000' }}
+        >
+          Stop Generation
+        </button>
+      )}
 
       {/* Tabs */}
       <AISettingsTabs currentMode={currentMode} onModeChange={setCurrentMode} />
